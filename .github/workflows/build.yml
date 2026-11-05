@@ -13,27 +13,33 @@ jobs:
           java-version: '8'
       - name: Download CLDC/MIDP stubs and ProGuard
         run: |
-          mkdir -p lib build/classes dist
+          mkdir -p lib build/classes build/stubs dist
           M=https://repo1.maven.org/maven2/org/microemu
           curl -fL $M/microemu-cldc/2.0.4/microemu-cldc-2.0.4.jar -o lib/cldc.jar
           curl -fL $M/microemu-midp/2.0.4/microemu-midp-2.0.4.jar -o lib/midp.jar
           curl -fL https://github.com/Guardsquare/proguard/releases/download/v7.2.2/proguard-7.2.2.zip -o pg.zip
           unzip -q pg.zip
+      - name: Make icon
+        run: python3 make_icon.py
       - name: Compile
         run: |
-          javac -source 1.3 -target 1.3 -classpath lib/midp.jar:lib/cldc.jar -d build/classes src/*.java
+          find stubs -name '*.java' > stubs.txt
+          javac -source 1.3 -target 1.3 -classpath lib/midp.jar:lib/cldc.jar -d build/stubs @stubs.txt
+          javac -source 1.3 -target 1.3 -classpath build/stubs:lib/midp.jar:lib/cldc.jar -d build/classes src/*.java
           jar cf build/in.jar -C build/classes .
       - name: Preverify with ProGuard
         run: |
           java -jar proguard-7.2.2/lib/proguard.jar -injars build/in.jar -outjars build/out.jar \
             -libraryjars "$JAVA_HOME/jre/lib/rt.jar" \
-            -libraryjars lib/midp.jar -libraryjars lib/cldc.jar \
-            -microedition -dontobfuscate -dontoptimize -dontwarn \
+            -libraryjars build/stubs -libraryjars lib/midp.jar -libraryjars lib/cldc.jar \
+            -microedition -dontobfuscate -dontoptimize -dontwarn -ignorewarnings \
             -keep "public class ModernNotes"
       - name: Package JAR + JAD
         run: |
+          V="1.1.${GITHUB_RUN_NUMBER}"
           mkdir pre && cd pre && unzip -q ../build/out.jar && rm -rf META-INF && cd ..
-          printf 'Manifest-Version: 1.0\nMIDlet-1: Modern Notes, , ModernNotes\nMIDlet-Name: Modern Notes\nMIDlet-Vendor: Me\nMIDlet-Version: 1.0.0\nMicroEdition-Configuration: CLDC-1.0\nMicroEdition-Profile: MIDP-2.0\n' > manifest.mf
+          cp res/icon.png pre/icon.png
+          printf 'Manifest-Version: 1.0\nMIDlet-1: Modern Notes, /icon.png, ModernNotes\nMIDlet-Icon: /icon.png\nMIDlet-Name: Modern Notes\nMIDlet-Vendor: Me\nMIDlet-Version: %s\nMicroEdition-Configuration: CLDC-1.0\nMicroEdition-Profile: MIDP-2.0\nMIDlet-Permissions-Opt: javax.microedition.io.PushRegistry, javax.microedition.io.Connector.file.read, javax.microedition.io.Connector.file.write, javax.microedition.media.control.VideoControl.getSnapshot\n' "$V" > manifest.mf
           jar cfm dist/ModernNotes.jar manifest.mf -C pre .
           SIZE=$(stat -c%s dist/ModernNotes.jar)
           { sed '1d' manifest.mf; echo "MIDlet-Jar-URL: ModernNotes.jar"; echo "MIDlet-Jar-Size: $SIZE"; } > dist/ModernNotes.jad
