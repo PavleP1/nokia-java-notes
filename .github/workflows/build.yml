@@ -20,7 +20,7 @@ jobs:
           curl -fL https://github.com/Guardsquare/proguard/releases/download/v7.2.2/proguard-7.2.2.zip -o pg.zip
           unzip -q pg.zip
       - name: Make icon
-        run: python3 make_icon.py
+        run: python3 make-icon.py
       - name: Compile
         run: |
           find stubs -name '*.java' > stubs.txt
